@@ -49,6 +49,8 @@ brew install portaudio   # macOS
 pip3 install -r requirements.txt
 ```
 
+Install from `requirements.txt` rather than adding packages one at a time — it has pinned versions and a note on why `setuptools` is held below 80 (needed for the `webrtcvad` build on Python 3.12+).
+
 ### Run the wake word test
 
 ```bash

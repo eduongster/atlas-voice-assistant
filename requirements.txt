@@ -1,0 +1,23 @@
+# Atlas voice assistant - Python dependencies
+# Install everything at once:  pip3 install -r requirements.txt
+#
+# Needs the PortAudio system library too (PyAudio's C dependency):
+#   brew install portaudio            # macOS
+#   sudo apt install portaudio19-dev  # Linux
+
+anthropic==1.0.0
+numpy==2.5.2
+openwakeword==0.6.0
+PyAudio==0.2.14
+python-dotenv==1.2.3
+pywhispercpp==1.5.1
+webrtcvad==2.0.10
+
+# Build-time dependency, deliberately held below 80.
+# webrtcvad 2.0.10 has a legacy setup.py that imports `distutils`. That module
+# was removed from the stdlib in Python 3.12, and setuptools 80 dropped the
+# compatibility shim that used to stand in for it. On Python 3.12+ with
+# setuptools >= 80, `pip3 install webrtcvad` fails to build with
+# "ModuleNotFoundError: No module named 'distutils'". Pinning < 80 keeps the
+# shim available so the wheel builds.
+setuptools==79.0.1
