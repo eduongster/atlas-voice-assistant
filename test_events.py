@@ -8,10 +8,13 @@ Run:  python3 test_events.py
 Exit code is non-zero if any check fails.
 """
 
+import http.client
+import json
 import logging
 import re
 import sys
 import threading
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -19,6 +22,7 @@ sys.path.insert(0, str(HERE))
 
 from dashboard import events  # noqa: E402
 from dashboard.events import EventBus, EventError, validate  # noqa: E402
+from dashboard.server import DashboardServer  # noqa: E402
 
 # --------------------------------------------------------------------------
 # tiny test runner
@@ -267,11 +271,103 @@ def test_bus():
 
 
 # --------------------------------------------------------------------------
+# 6. server
+# --------------------------------------------------------------------------
+def _get(port, path, host="127.0.0.1"):
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    conn.putrequest("GET", path, skip_host=True)
+    conn.putheader("Host", f"{host}:{port}")
+    conn.endheaders()
+    resp = conn.getresponse()
+    body = resp.read()
+    conn.close()
+    return resp.status, resp.getheader("Content-Type", ""), body
+
+
+def _read_sse_message(resp):
+    """Read one SSE message (skipping heartbeat comments); returns (name, id, data)."""
+    name, event_id, data = "message", None, None
+    while True:
+        line = resp.fp.readline().decode().rstrip("\n")
+        if line == "":
+            if data is not None:
+                return name, event_id, json.loads(data)
+            continue
+        if line.startswith(":"):
+            continue
+        field, _, value = line.partition(": ")
+        if field == "event":
+            name = value
+        elif field == "id":
+            event_id = int(value)
+        elif field == "data":
+            data = value
+
+
+def test_server():
+    section("6. Dashboard server")
+    bus = EventBus(strict=True)
+    server = DashboardServer(bus=bus, port=0).start()
+    port = server.port
+    try:
+        bus.emit("session.started", mode="demo")
+        bus.emit("state", state="idle")
+
+        status, ctype, body = _get(port, "/")
+        check("6a: / serves the dashboard HTML",
+              status == 200 and ctype.startswith("text/html") and b"<title>" in body,
+              f"status={status} type={ctype}")
+
+        attempts = ["/static/../events.py", "/static/%2e%2e/server.py",
+                    "/static/..%2f..%2fvoice_loop.py", "/static//etc/passwd"]
+        leaks = [(p, s) for p in attempts if (s := _get(port, p)[0]) != 404]
+        check("6b: path traversal out of dashboard/static is refused (404)",
+              not leaks, f"leaked={leaks}")
+
+        status, _, _ = _get(port, "/", host="evil.example")
+        check("6c: requests with a non-localhost Host header are refused (DNS rebinding)",
+              status == 403, f"status={status}")
+
+        status, _, body = _get(port, "/api/snapshot")
+        snap = json.loads(body)
+        check("6d: /api/snapshot returns the session's events",
+              status == 200 and snap["session"] == bus.session and len(snap["events"]) == 2)
+
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.request("GET", "/events")
+        resp = conn.getresponse()
+        name, _, first = _read_sse_message(resp)
+        check("6e: /events opens with a snapshot of everything so far",
+              resp.status == 200
+              and resp.getheader("Content-Type", "").startswith("text/event-stream")
+              and name == "snapshot"
+              and [e["type"] for e in first["events"]] == ["session.started", "state"]
+              and isinstance(first["now"], float),
+              f"name={name} types={[e['type'] for e in first['events']]}")
+
+        live = bus.emit("state", state="wake", turn=1)
+        name, event_id, got = _read_sse_message(resp)
+        check("6f: live events stream after the snapshot, with SSE ids",
+              name == "message" and event_id == live["id"] and got == live,
+              f"name={name} id={event_id}")
+
+        t0 = time.monotonic()
+        server.stop()
+        stopped_in = time.monotonic() - t0
+        conn.close()
+        check("6g: server stops promptly even with a stream open",
+              stopped_in < 3, f"stopped in {stopped_in:.2f}s")
+    finally:
+        server.stop()   # idempotent
+
+
+# --------------------------------------------------------------------------
 def main():
     test_envelope()
     test_validation()
     test_emit_safety()
     test_bus()
+    test_server()
 
     section("summary")
     passed = sum(1 for _, ok, _ in _results if ok)
