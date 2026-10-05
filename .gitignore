@@ -7,4 +7,4 @@ token.json
 *.onnx
 .DS_Store
 temp_recording.wav
-
+sessions/

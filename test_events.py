@@ -22,6 +22,7 @@ sys.path.insert(0, str(HERE))
 
 from dashboard import events  # noqa: E402
 from dashboard.events import EventBus, EventError, validate  # noqa: E402
+from dashboard import demo  # noqa: E402
 from dashboard.server import DashboardServer  # noqa: E402
 
 # --------------------------------------------------------------------------
@@ -271,6 +272,104 @@ def test_bus():
 
 
 # --------------------------------------------------------------------------
+# 5. demo mode
+# --------------------------------------------------------------------------
+class _ListBus(EventBus):
+    """Strict bus that also keeps transient events, for inspecting a demo run."""
+
+    def __init__(self):
+        super().__init__(strict=True)
+        self.all = []
+
+    def emit(self, etype, **data):
+        ev = super().emit(etype, **data)
+        self.all.append(ev)
+        return ev
+
+
+def test_demo():
+    section("5. Demo mode")
+    steps = demo.scenario()
+    bus = _ListBus()
+    t0 = time.monotonic()
+    try:
+        finished = demo.run(bus, steps, speed=10_000)
+        err = None
+    except EventError as e:
+        finished, err = False, e
+    took = time.monotonic() - t0
+    evs = bus.all
+    check("5a: the whole script runs on a strict bus without a schema error",
+          finished and err is None and len(evs) == len(steps),
+          f"err={err} events={len(evs)} took {took:.2f}s")
+
+    script_len = steps[-1][0]
+    check("5b: script is a usable length for a demo video (60-150 s at speed 1)",
+          60 <= script_len <= 150, f"{script_len:.0f}s")
+
+    states = {e["data"]["state"] for e in evs if e["type"] == "state"}
+    kinds = {e["data"]["kind"] for e in evs if e["type"] == "action"}
+    statuses = {e["data"]["status"] for e in evs if e["type"] == "action"}
+    health = {(e["data"]["component"], e["data"]["status"]) for e in evs if e["type"] == "health"}
+    types = {e["type"] for e in evs}
+    check("5c: covers all 7 states",
+          states == set(events.STATES), f"missing={set(events.STATES) - states}")
+    check("5d: covers calendar, timer and reminder cards, incl. a timer that rings",
+          {"calendar.create", "timer.start", "reminder.create"} <= kinds
+          and {"pending", "done", "triggered"} <= statuses,
+          f"kinds={sorted(kinds)} statuses={sorted(statuses)}")
+    check("5e: status strip sees all 4 components and ok/slow/failing/idle",
+          {c for c, _ in health} == set(events.HEALTH_COMPONENTS)
+          and {st for _, st in health} == set(events.HEALTH_STATUSES),
+          f"health={sorted(health)}")
+    check("5f: includes a no-speech turn, an error, and live mic levels",
+          {"turn.discarded", "error", "audio.level"} <= types)
+
+    # timer: "triggered" lands ~duration after "done" in script time
+    tea = [(t, d) for t, ty, d in steps if ty == "action" and callable(d)]
+    done_t = next(t for t, d in tea if d(1)["status"] == "done")
+    trig_t = next(t for t, d in tea if d(1)["status"] == "triggered")
+    check("5g: the 30 s tea timer rings 30 s after it starts (in script time)",
+          abs((trig_t - done_t) - 30) < 0.5, f"{trig_t - done_t:.1f}s")
+
+    # each completed turn walks the pipeline in order
+    order = ["wake", "recording", "transcribing", "thinking", "speaking", "idle"]
+    by_turn = {}
+    for e in evs:
+        if e["type"] == "state" and "turn" in e["data"]:
+            by_turn.setdefault(e["data"]["turn"], []).append(e["data"]["state"])
+    answered = {e["data"]["turn"] for e in evs if e["type"] == "turn.assistant"}
+    bad = {t: seq for t, seq in by_turn.items() if t in answered and seq != order}
+    check("5h: every answered turn goes wake -> recording -> transcribing -> thinking -> speaking -> idle",
+          answered and not bad, f"bad={bad}")
+
+    # record a short session, then replay it
+    path = HERE / "tests" / "_replay_test.jsonl"
+    path.unlink(missing_ok=True)
+    rec = EventBus(strict=True)
+    rec.record_to(path)
+    rec.emit("session.started", mode="live")
+    time.sleep(0.05)
+    rec.emit("action", action_id="a1", kind="timer.start", status="done",
+             payload={"label": "Eggs", "duration_s": 60, "ends_at": events.now_iso()})
+    rec.record_to(None)
+    replay = demo.load_recording(path)
+    path.unlink()
+    rbus = _ListBus()
+    demo.run(rbus, replay, speed=10_000)
+    first, timer = rbus.all
+    check("5i: a --record session replays with mode 'replay' and its original timing",
+          first["data"]["mode"] == "replay" and 0.04 <= replay[1][0] < 0.5
+          and timer["data"]["payload"]["ends_at"] >= first["ts"][:19],
+          f"gap={replay[1][0]:.3f}s ends_at={timer['data']['payload']['ends_at']}")
+
+    stop = threading.Event()
+    stop.set()
+    check("5j: a stopped demo returns immediately",
+          demo.run(EventBus(), demo.scenario(), speed=1, stop=stop) is False)
+
+
+# --------------------------------------------------------------------------
 # 6. server
 # --------------------------------------------------------------------------
 def _get(port, path, host="127.0.0.1"):
@@ -367,6 +466,7 @@ def main():
     test_validation()
     test_emit_safety()
     test_bus()
+    test_demo()
     test_server()
 
     section("summary")
