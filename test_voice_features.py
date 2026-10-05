@@ -25,7 +25,11 @@ import webrtcvad
 
 HERE = Path(__file__).resolve().parent
 TARGET = HERE / "voice_loop.py"
-REAL_WAV = HERE / "temp_recording.wav"        # real 16kHz mono recording (4.96s)
+# 16kHz mono speech clip (5.3s, no pause longer than ~0.3s), generated on macOS with:
+#   say -v Samantha -o tests/fixtures/speech_sample.wav --data-format=LEI16@16000 \
+#     "Hey Atlas, what's on my calendar for tomorrow morning, and do I have anything before ten?"
+# Other macOS versions may synthesize a slightly different length; anything ~4.2-5.5s passes.
+REAL_WAV = HERE / "tests/fixtures/speech_sample.wav"
 SCRATCH = Path("/private/tmp/claude-501/-Users-eduong-atlas-voice-assistant"
                "/bf44a04e-4190-4e06-94c4-c61b18da9c15/scratchpad")
 SCRATCH.mkdir(parents=True, exist_ok=True)
