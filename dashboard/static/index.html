@@ -1,5 +1,64 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><title>Atlas</title></head>
-<body><p>Atlas dashboard: frontend not built yet.</p></body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas</title>
+<link rel="preload" href="/static/fonts/fraunces.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/atkinson-hyperlegible-next.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 20 20'%3E%3Ccircle r='8' fill='none' stroke='%23C9A45C' stroke-width='1.5'/%3E%3Cellipse rx='8' ry='2.6' fill='none' stroke='%23C9A45C' stroke-width='1.2'/%3E%3Ccircle r='1.6' fill='%23F2ECDF'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/styles.css">
+<script type="module" src="/static/app.js"></script>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1 class="wordmark">Atlas</h1>
+    <p class="session" id="session">Connecting to Atlas…</p>
+  </header>
+
+  <main class="main">
+    <section class="stage" aria-label="What Atlas is doing">
+      <svg class="sphere" id="sphere" data-state="idle" viewBox="-100 -100 200 200" aria-hidden="true">
+        <defs>
+          <radialGradient id="flare-fill">
+            <stop offset="0" stop-color="#F6EBC8" stop-opacity=".95"/>
+            <stop offset=".35" stop-color="#C9A45C" stop-opacity=".45"/>
+            <stop offset="1" stop-color="#C9A45C" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <circle class="flare" r="60" fill="url(#flare-fill)"/>
+        <g class="pulses"><circle r="36"/><circle r="58"/><circle r="80"/></g>
+        <circle class="ring meridian" r="80"/>
+        <g class="mount mount-a">
+          <ellipse class="ring equator" rx="80" ry="22"/>
+          <g class="orbit orbit-a"><circle class="planet" cx="80" r="3.6"/></g>
+        </g>
+        <g class="mount mount-b">
+          <ellipse class="ring ecliptic" rx="80" ry="30"/>
+          <g class="orbit orbit-b"><circle class="planet" cx="80" r="2.7"/></g>
+        </g>
+        <circle class="ring scan" r="80"/>
+        <g class="glyphs">
+          <circle cx="-62" cy="12" r="2.4"/><circle cx="-40" cy="18" r="2.4"/>
+          <circle cx="-14" cy="21.5" r="2.4"/><circle cx="14" cy="21.5" r="2.4"/>
+          <circle cx="40" cy="18" r="2.4"/><circle cx="62" cy="12" r="2.4"/>
+        </g>
+        <circle class="ticks" r="64"/>
+        <g class="sweep"><line y1="0" y2="-80"/><circle cy="-80" r="3"/></g>
+        <circle class="star" r="4"/>
+      </svg>
+      <h2 class="state-name" id="state-name" aria-live="polite">Listening for “Hey Jarvis”</h2>
+      <p class="state-detail" id="state-detail">Say it, then ask your question.</p>
+      <div class="running" id="running"></div>
+    </section>
+
+    <section class="log" id="log" aria-label="Conversation">
+      <div class="log-inner" id="log-inner"></div>
+    </section>
+  </main>
+
+  <footer class="strip" id="strip" aria-label="Model status"></footer>
+</div>
+</body>
 </html>

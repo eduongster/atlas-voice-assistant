@@ -343,6 +343,18 @@ def test_demo():
     check("5h: every answered turn goes wake -> recording -> transcribing -> thinking -> speaking -> idle",
           answered and not bad, f"bad={bad}")
 
+    # actions belong to the turn that created them (pending/done land during
+    # that turn; only a later "triggered" may arrive after other turns start)
+    current, wrong = None, []
+    for e in evs:
+        if e["type"] == "wake.detected":
+            current = e["data"]["turn"]
+        elif e["type"] == "action" and e["data"]["status"] in ("pending", "done"):
+            if e["data"].get("turn") != current:
+                wrong.append((e["data"]["action_id"], e["data"].get("turn"), current))
+    check("5k: every action is attached to the turn that created it",
+          not wrong, f"(action, its turn, actual turn)={wrong}")
+
     # record a short session, then replay it
     path = HERE / "tests" / "_replay_test.jsonl"
     path.unlink(missing_ok=True)
@@ -422,6 +434,23 @@ def test_server():
         leaks = [(p, s) for p in attempts if (s := _get(port, p)[0]) != 404]
         check("6b: path traversal out of dashboard/static is refused (404)",
               not leaks, f"leaked={leaks}")
+
+        index = (HERE / "dashboard" / "static" / "index.html").read_text()
+        refs = re.findall(r'(?:href|src)="(/static/[^"]+)"', index)
+        expected = {".css": "text/css", ".js": "text/javascript", ".woff2": "font/woff2"}
+        bad = []
+        for ref in refs:
+            st, ct, _ = _get(port, ref)
+            want = expected.get(Path(ref).suffix, "")
+            if st != 200 or not ct.startswith(want):
+                bad.append((ref, st, ct))
+        js_imports = []
+        for js in (HERE / "dashboard" / "static").glob("*.js"):
+            js_imports += re.findall(r'from "\./([^"]+)"', js.read_text())
+        missing = [m for m in js_imports if _get(port, f"/static/{m}")[0] != 200]
+        check("6h: every asset index.html and the JS modules reference is served with the right type",
+              len(refs) >= 4 and not bad and not missing,
+              f"{len(refs)} refs, bad={bad}, missing imports={missing}")
 
         status, _, _ = _get(port, "/", host="evil.example")
         check("6c: requests with a non-localhost Host header are refused (DNS rebinding)",

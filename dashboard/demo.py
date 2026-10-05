@@ -136,11 +136,11 @@ def scenario():
     tea = s.action_id()
     s.at(0.4, "action", action_id=tea, turn=t, kind="timer.start", status="pending", title="Tea",
          payload={"label": "Tea", "duration_s": 30, "ends_at": _iso(datetime.now())})
-    s.at(0.3, "action", lambda speed: {
+    s.at(0.3, "action", lambda speed, t=t: {   # bind t now; it's reassigned below
         "action_id": tea, "turn": t, "kind": "timer.start", "status": "done", "title": "Tea",
         "payload": {"label": "Tea", "duration_s": 30,
                     "ends_at": _iso(datetime.now() + timedelta(seconds=30 / speed))}})
-    s.later(30, "action", lambda speed: {
+    s.later(30, "action", lambda speed, t=t: {
         "action_id": tea, "turn": t, "kind": "timer.start", "status": "triggered", "title": "Tea",
         "payload": {"label": "Tea", "duration_s": 30, "ends_at": _iso(datetime.now())}})
     s.answer(t, "Tea timer set for thirty seconds.", 950, already_waited=0.7)
