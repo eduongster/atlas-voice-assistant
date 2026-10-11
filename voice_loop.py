@@ -178,7 +178,7 @@ def ask_claude(question):
 
     response = client.messages.create(
         model=MODEL,
-        max_tokens=300,
+        max_tokens=1024,
         system=SYSTEM_PROMPT,
         messages=conversation_history + [user_turn],
     )
